@@ -10,12 +10,14 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "postinstall": "node scripts/vendor.mjs",
     "start": "node bin/even-orca.mjs serve",
     "check": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "@evenrealities/even-terminal": "0.10.5",
+    "@evenrealities/pretext": "0.1.4",
     "express": "^5.2.1",
     "openai": "^6.0.0",
     "qrcode": "^1.5.4"

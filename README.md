@@ -6,8 +6,11 @@ Even G2의 기존 Terminal 음성 인식 결과를 보정해서 Orca 안에서 �
 
 Node.js 22.18 이상, Orca, 기존에 설정한 `claude` 또는 `codex` CLI, OpenAI API 키가 필요합니다. Mac과 휴대폰은 같은 사설 네트워크에 연결합니다.
 
+아래 예시는 저장소를 `~/even-orca`에 받는다고 가정합니다. 다른 위치라면 경로를 바꿔 실행하세요.
+
 ```sh
-cd /Users/sayzard/Projects/even
+git clone https://github.com/sayzard/even-orca.git ~/even-orca
+cd ~/even-orca
 npm ci
 test -f .env || cp .env.example .env
 chmod 600 .env
@@ -18,15 +21,15 @@ chmod 600 .env
 Orca에서는 작업하려는 워크스페이스의 터미널에서 아래 중 하나를 실행합니다.
 
 ```sh
-/Users/sayzard/Projects/even/bin/even-orca.mjs claude
-/Users/sayzard/Projects/even/bin/even-orca.mjs codex
+~/even-orca/bin/even-orca.mjs claude
+~/even-orca/bin/even-orca.mjs codex
 ```
 
 기존 대화는 같은 워크스페이스에서 에이전트의 세션 UUID를 지정해 엽니다. 기존 CLI 인스턴스에서 같은 세션을 열어 둔 경우 먼저 그 인스턴스를 종료합니다.
 
 ```sh
-/Users/sayzard/Projects/even/bin/even-orca.mjs claude --resume <session-id>
-/Users/sayzard/Projects/even/bin/even-orca.mjs codex resume <session-id>
+~/even-orca/bin/even-orca.mjs claude --resume <session-id>
+~/even-orca/bin/even-orca.mjs codex resume <session-id>
 ```
 
 Even 앱에서 연결된 세션을 선택합니다. 새 Claude 세션이 목록에 바로 나오지 않으면 Orca에서 한 번 입력해 세션을 등록합니다. Codex에서 다른 대화로 바꿀 때는 연동 명령으로 해당 세션을 다시 엽니다. 음성 입력 중에는 Orca 입력창에 작성 중인 문장을 먼저 제출하거나 지워 두세요.
@@ -42,6 +45,10 @@ Even 앱에서 연결된 세션을 선택합니다. 새 Claude 세션이 목록�
 - 권한 요청, 선택 질문, 중단은 G2에서 처리하지 않습니다. G2에 알림이 오면 Orca 터미널에서 응답합니다. 이 기능이 필요하면 연동 명령으로 세션을 여세요.
 - 터미널이 닫히거나 그 안의 프로세스가 바뀌면 연결이 풀리고 입력을 보내지 않습니다.
 - Orca CLI는 `/Applications/Orca.app/Contents/Resources/bin/orca`를 사용합니다. 다른 위치라면 `EVEN_ORCA_ORCA_BIN`으로 지정합니다.
+
+### G2 미리보기
+
+실제 안경 화면은 캡처할 수 없어서, Mac에서 [G2 미리보기](http://127.0.0.1:3466/preview)를 열면 브리지가 G2로 보내는 내용을 안경 화면(576×288)에 가깝게 그려 줍니다. 글자 폭과 자간은 Even의 G2 펌웨어 글꼴 측정값([@evenrealities/pretext](https://www.npmjs.com/package/@evenrealities/pretext), MIT)을 쓰고, 단어 단위 줄바꿈과 `>`·`/` 표시, 빈 줄과 마크다운 강조 제거는 실제 안경과 비교해 맞췄습니다. 글자 모양은 Mac 글꼴이라 실제와 다르고, 일부 줄바꿈이 한 단어 정도 다를 수 있습니다.
 
 ## 사전 및 모델
 
