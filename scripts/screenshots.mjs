@@ -49,7 +49,10 @@ app.get('/local/settings', (_req, res) => res.json(settings));
 app.get('/local/openai-key', (_req, res) => res.json({ configured: true }));
 app.get('/local/activity', (_req, res) => res.json({ activity, targets: [{ id: session, provider: 'claude', cwd: terminals[0].cwd }], pairingAvailable: true }));
 app.get('/local/orca', (_req, res) => res.json({ terminals }));
-app.get('/local/pairing.svg', async (_req, res) => res.type('svg').send(await QRCode.toString('http://192.168.1.20:3466?token=demo&defaultProvider=claude&name=Even%20Orca', { type: 'svg', margin: 4 })));
+// Blur the QR modules so the screenshot shows where the code is but cannot be scanned.
+const blurQr = (svg) => svg
+  .replace('<path stroke=', '<filter id="blur"><feGaussianBlur stdDeviation="1.2"/></filter><path filter="url(#blur)" stroke=');
+app.get('/local/pairing.svg', async (_req, res) => res.type('svg').send(blurQr(await QRCode.toString('http://192.168.1.20:3466?token=demo&defaultProvider=claude&name=Even%20Orca', { type: 'svg', margin: 4 }))));
 app.get('/local/preview-feed', (req, res) => {
   // preview.js does not forward ?lang to the feed; read it from the page URL.
   const lang = new URL(req.get('referer') ?? 'http://localhost/').searchParams.get('lang');
