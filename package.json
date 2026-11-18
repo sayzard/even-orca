@@ -2,6 +2,7 @@
   "name": "even-orca",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "bin": {
     "even-orca": "bin/even-orca.mjs"
