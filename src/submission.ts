@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Provider, Settings } from './config.ts';
-import { correct, validPrompt } from './correction.ts';
+import { correct, MissingApiKey, validPrompt } from './correction.ts';
 import type { SuggestEdits } from './correction.ts';
 import type { Sessions, Target } from './sessions.ts';
 import { NotDelivered } from './orca.ts';
@@ -85,7 +85,8 @@ export function createSubmission(sessions: Sessions, getSettings: () => Settings
         throw new RequestError(503, '같은 Orca 세션의 입력 기록을 읽지 못했습니다.');
       });
       const settings = getSettings();
-      entry.corrected = await correct(suggest, settings, raw, history).catch(() => {
+      entry.corrected = await correct(suggest, settings, raw, history).catch((error: unknown) => {
+        if (error instanceof MissingApiKey) throw new RequestError(503, 'OpenAI API 키가 없습니다. Mac 설정 화면에서 키를 입력하세요.');
         throw new RequestError(503, 'OpenAI 보정에 실패했습니다. API 키, 모델, effort 또는 연결을 확인하세요.');
       });
       await assertIdle();

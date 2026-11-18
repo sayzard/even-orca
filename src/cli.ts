@@ -5,8 +5,10 @@ import type { Server } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { newToken, openSettings, portFrom, readJson, stateDir, writeJson } from './config.ts';
 import type { Provider, Runtime } from './config.ts';
+import { openApiKey } from './secrets.ts';
 import { evenCli, loadEven, validId } from './sessions.ts';
 
 const runtimeFile = join(stateDir, 'runtime.json');
@@ -30,10 +32,12 @@ function listen(server: Server, port: number, host: string) {
 }
 
 async function serve() {
-  try { process.loadEnvFile(); }
+  // The project's .env, wherever the bridge is started from. Mac settings
+  // writes a new OpenAI key into the same file.
+  const envFile = fileURLToPath(new URL('../.env', import.meta.url));
+  try { process.loadEnvFile(envFile); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  const apiKey = process.env.EVEN_ORCA_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('Set EVEN_ORCA_OPENAI_API_KEY in .env or in the environment before starting the bridge.');
+  const apiKey = openApiKey({ env: process.env.EVEN_ORCA_OPENAI_API_KEY || process.env.OPENAI_API_KEY, envFile });
   delete process.env.EVEN_ORCA_OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.USE_ORIGINAL_CLAUDE;
@@ -55,8 +59,8 @@ async function serve() {
   const pairingUrl = lan ? new URL(`http://${lan}:${port}`) : undefined;
   if (pairingUrl) pairingUrl.search = new URLSearchParams({ token, defaultProvider, name: 'Even Orca' }).toString();
   const adminToken = newToken();
-  const submission = createSubmission(even.sessions, settings.current, createOpenAIEditor(apiKey));
-  const { local, phone } = createApps({ even, submission, settings, token, adminToken, port, defaultProvider, pairingUrl: pairingUrl?.href });
+  const submission = createSubmission(even.sessions, settings.current, createOpenAIEditor(apiKey.current));
+  const { local, phone } = createApps({ even, submission, settings, apiKey, token, adminToken, port, defaultProvider, pairingUrl: pairingUrl?.href });
   const localServer = createServer(local);
   const phoneServer = lan ? createServer(phone) : undefined;
   const servers = phoneServer ? [localServer, phoneServer] : [localServer];
@@ -79,6 +83,7 @@ async function serve() {
     console.log(`Server: ${pairingUrl.origin}`);
   } else console.log('No private LAN address selected. Running in Mac-only mode.');
   console.log(`Mac settings and G2 QR: http://127.0.0.1:${port}`);
+  if (!apiKey.status().configured) console.log('OpenAI API key: not set. Enter it in Mac settings; prompts are held until then.');
   await reportOrca(even.orca);
 
   function stop() {

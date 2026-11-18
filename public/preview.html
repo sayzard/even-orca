@@ -3,28 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>G2 미리보기</title>
+  <title data-i18n>G2 미리보기 · Even Orca</title>
   <link rel="stylesheet" href="/assets/preview.css">
   <script src="/assets/preview.js" type="module"></script>
 </head>
 <body>
   <main>
     <header>
-      <h1>G2 미리보기</h1>
-      <p class="muted">브리지가 G2로 보내는 내용을 안경 화면 크기(576×288)로 흉내 낸 화면입니다. 실제 화면과 다른 점을 알려 주세요.</p>
+      <div class="heading"><h1 data-i18n>G2 미리보기</h1><div class="lang" id="lang"></div></div>
+      <p class="muted" data-i18n>브리지가 G2로 보내는 내용을 안경 화면 크기(576×288)로 흉내 낸 화면입니다. 실제 화면과 다른 점을 알려 주세요.</p>
     </header>
     <div class="controls">
-      <label>세션 <select id="session"></select></label>
-      <label>확대 <select id="zoom"><option value="1">1×</option><option value="1.5" selected>1.5×</option><option value="2">2×</option></select></label>
-      <a href="/settings">설정</a>
+      <label><span data-i18n>세션</span> <select id="session"></select></label>
+      <label><span data-i18n>확대</span> <select id="zoom"><option value="1">1×</option><option value="1.5" selected>1.5×</option><option value="2">2×</option></select></label>
+      <a href="/settings" data-i18n>설정</a>
     </div>
     <div class="frame" id="frame">
       <div class="lens" id="lens" aria-live="polite">
         <div class="viewport"><div class="body" id="body"><div class="lines" id="lines"></div></div><div class="thumb" id="thumb" hidden></div></div>
-        <div class="footer"><span class="spinner" id="spinner">/ </span><div class="bar"><span id="status"></span><span class="hint">[길게 눌러 입력]</span></div></div>
+        <div class="footer"><span class="spinner" id="spinner">/ </span><div class="bar"><span id="status"></span><span class="hint" id="hint"></span></div></div>
       </div>
     </div>
-    <p class="muted" id="note">연결된 세션을 기다리는 중입니다.</p>
+    <p class="muted" id="note" data-i18n>연결된 세션을 기다리는 중입니다.</p>
   </main>
 </body>
 </html>

@@ -3,6 +3,7 @@
 // breaking follow the G2 firmware font (via @evenrealities/pretext); the
 // layout constants below were calibrated against the real glasses.
 import { getAdvW, getTextWidth } from './vendor/pretext.js';
+import { locale, mountSwitcher, onLanguageChange, t, translate } from './i18n.js';
 
 const get = id => document.getElementById(id);
 // Only the idle text is confirmed on the real glasses; the others are guesses.
@@ -85,7 +86,7 @@ function screenModel(list) {
       lines.push({ kind: 'note', text: [message.title, message.message].filter(Boolean).join(': ') });
       paragraph = undefined;
     } else if (message.type === 'permission_request') {
-      lines.push({ kind: 'note', text: `권한 요청: ${message.toolName ?? ''}` });
+      lines.push({ kind: 'note', text: t('권한 요청: {tool}', { tool: message.toolName ?? '' }) });
       paragraph = undefined;
     } else if (message.type === 'tool_end') {
       // Only present when "G2에 도구 실행 표시" is on.
@@ -121,7 +122,9 @@ function render() {
   const { lines, phase } = screenModel(messages);
   const shown = state === 'idle' || state === 'disconnected' || state === 'awaiting' ? state : phase === 'thinking' ? 'thinking' : 'busy';
   get('status').replaceChildren();
-  glyphRun(get('status'), cells(statusNames[shown] ?? shown));
+  glyphRun(get('status'), cells(t(statusNames[shown] ?? shown)));
+  get('hint').replaceChildren();
+  glyphRun(get('hint'), cells(t('[길게 눌러 입력]')));
   // The app prefixes the user's prompts with "/" and agent output with ">",
   // shows no blank lines, drops markdown bold markers (no bold weight), and
   // indents wrapped lines to the text column.
@@ -160,7 +163,7 @@ async function poll() {
       select.replaceChildren(...feed.sessions.map(item => new Option(`${item.label} · ${item.id.slice(-8)}`, item.id)));
     }
     if (!feed.sessionId) {
-      get('note').textContent = '연결된 세션이 없습니다. 설정에서 Orca 터미널을 G2에 연결하세요.';
+      get('note').textContent = t('연결된 세션이 없습니다. 설정에서 Orca 터미널을 G2에 연결하세요.');
       return;
     }
     if (feed.sessionId !== sessionId) {
@@ -173,9 +176,9 @@ async function poll() {
     messages = messages.concat(feed.messages).slice(-400);
     after = messages.at(-1)?.id ?? after;
     state = feed.state;
-    get('note').textContent = `마지막 갱신 ${new Date().toLocaleTimeString('ko-KR')} · 받은 메시지 ${messages.length}개`;
+    get('note').textContent = t('마지막 갱신 {time} · 받은 메시지 {count}개', { time: new Date().toLocaleTimeString(locale()), count: messages.length });
     if (fresh) render();
-  } catch (error) { get('note').textContent = error.message; }
+  } catch (error) { get('note').textContent = t(error.message); }
 }
 
 get('session').addEventListener('change', event => {
@@ -189,6 +192,9 @@ const lens = get('lens');
 lens.style.setProperty('--prefix', `${prefixWidth}px`);
 lens.style.setProperty('--status-col', `${statusWidth}px`);
 lens.style.setProperty('--content', `${contentWidth}px`);
+mountSwitcher(get('lang'));
+translate();
+onLanguageChange(render);
 render();
 void poll();
 setInterval(() => { if (!document.hidden) void poll(); }, 1000);

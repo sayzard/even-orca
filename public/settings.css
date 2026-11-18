@@ -38,9 +38,20 @@ input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px s
 button { padding: 7px 12px; border: 1px solid transparent; color: #151d14; background: var(--accent); cursor: pointer; font-weight: 650; white-space: nowrap; }
 button.secondary { background: #252f28; border-color: var(--border); color: #e4eee6; }
 button:hover { filter: brightness(1.12); }
-#feedback:empty { display: none; }
-#feedback { margin-top: 12px; color: var(--accent); }
-#feedback.error, .held, .unknown { color: #ffbf9d; }
+.feedback:empty { display: none; }
+.feedback { margin-top: 12px; color: var(--accent); }
+.feedback.error, .key-status.error, .held, .unknown { color: #ffbf9d; }
+/* OpenAI key, model and effort fold away once a key is configured. */
+.openai { margin: 0 0 6px; }
+.openai summary { cursor: pointer; width: fit-content; font-weight: 650; margin-bottom: 12px; }
+.openai summary .muted { font-weight: 400; margin-left: 6px; }
+.openai > .muted { margin-top: 10px; }
+.fields .wide { grid-column: 1 / -1; }
+.key-status { margin: -4px 0 4px; font-size: .86rem; color: var(--muted); }
+/* Language switcher: flag buttons at the right of the header. */
+.lang { margin-left: auto; display: flex; gap: 6px; }
+.flag { min-height: 34px; padding: 2px 8px; font-size: 1.25rem; line-height: 1; background: transparent; border: 1px solid var(--border); opacity: .55; }
+.flag[aria-pressed="true"] { opacity: 1; border-color: var(--accent); }
 #activity { margin: 0; padding: 0; list-style: none; }
 #activity li { border-top: 1px solid var(--border); padding: 12px 0; }
 #activity li:first-child { border-top: 0; }

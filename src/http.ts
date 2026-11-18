@@ -10,6 +10,7 @@ import type { Provider } from './config.ts';
 import type { openSettings } from './config.ts';
 import type { createSubmission } from './submission.ts';
 import type { loadEven } from './sessions.ts';
+import type { ApiKey } from './secrets.ts';
 
 const publicPath = fileURLToPath(new URL('../public/', import.meta.url));
 const remoteRoutes = new Set(['GET /info', 'GET /update-check', 'POST /permission-response', 'POST /question-response', 'POST /interrupt']);
@@ -81,6 +82,8 @@ export function createApps(options: {
   even: Awaited<ReturnType<typeof loadEven>>;
   submission: ReturnType<typeof createSubmission>;
   settings: ReturnType<typeof openSettings>;
+  /** Write-only OpenAI key in .env; omitted in tests that do not need it. */
+  apiKey?: ApiKey;
   token: string;
   adminToken: string;
   port: number;
@@ -221,6 +224,16 @@ export function createApps(options: {
   });
   local.use('/assets', express.static(publicPath, { index: false, redirect: false }));
   local.get('/local/settings', (_req, res) => res.json(settings.current()));
+  // Write-only: the page learns whether a key is set, never the key.
+  local.get('/local/openai-key', (_req, res) => res.json(options.apiKey?.status() ?? { configured: false }));
+  local.put('/local/openai-key', express.json({ limit: '2kb' }), async (req, res) => {
+    if (req.get('X-Even-Orca-Settings') !== '1') return res.sendStatus(403);
+    if (!options.apiKey) return res.sendStatus(404);
+    try {
+      const check = await options.apiKey.set(req.body?.key);
+      return res.json({ ...options.apiKey.status(), verified: check === 'valid' });
+    } catch (error) { throw new RequestError(400, error instanceof Error ? error.message : '키를 저장하지 못했습니다.'); }
+  });
   local.put('/local/settings', express.json({ limit: '160kb' }), (req, res) => {
     if (req.get('X-Even-Orca-Settings') !== '1') return res.sendStatus(403);
     try { return res.json(settings.update(req.body)); }

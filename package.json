@@ -14,7 +14,8 @@
     "postinstall": "node scripts/vendor.mjs",
     "start": "node bin/even-orca.mjs serve",
     "check": "tsc --noEmit",
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@evenrealities/even-terminal": "0.10.5",

@@ -15,10 +15,21 @@ When recent context resolves a spoken file name to an exact path, use the exact 
 For "테스트 3개 지워, 아니, 테스트 2개 추가해.", replace the abandoned prefix "테스트 3개 지워, 아니, " with an empty string. Keep any separate, completed sentences before the correction.
 Prefer a short specific phrase over rewriting the whole transcript. Use empty edits if all text is already accurate. Return only the structured edits.`;
 
-export function createOpenAIEditor(apiKey: string, baseURL = 'https://api.openai.com/v1'): SuggestEdits {
-  const client = new OpenAI({ apiKey, baseURL, timeout: 6500, maxRetries: 0 });
+/** No OpenAI API key is configured (neither in Mac settings nor in .env). */
+export class MissingApiKey extends Error {}
+
+export function createOpenAIEditor(apiKey: string | (() => string | undefined), baseURL = 'https://api.openai.com/v1'): SuggestEdits {
+  // The key can change from Mac settings while the bridge runs; keep one
+  // client for the current key.
+  let cached: { key: string; client: OpenAI } | undefined;
+  const clientFor = () => {
+    const key = typeof apiKey === 'function' ? apiKey() : apiKey;
+    if (!key) throw new MissingApiKey('OpenAI API key is not set');
+    if (cached?.key !== key) cached = { key, client: new OpenAI({ apiKey: key, baseURL, timeout: 6500, maxRetries: 0 }) };
+    return cached.client;
+  };
   return async (settings, transcript, context) => {
-    const response = await client.responses.create({
+    const response = await clientFor().responses.create({
       model: settings.model,
       reasoning: { effort: settings.effort },
       instructions,

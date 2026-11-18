@@ -1,79 +1,160 @@
 # Even Orca
 
-Even G2의 기존 Terminal 음성 인식 결과를 보정해서 Orca 안에서 연 Claude Code 또는 Codex 세션에 제출합니다. 녹음과 안경 표시는 Even 앱이 담당합니다. Mac 브리지는 인식된 문장에 사용자 사전과 같은 세션의 최근 입력을 적용한 뒤 자동 제출합니다. 실제로 제출된 문장과 에이전트 답변은 Even Terminal의 이벤트 스트림으로 돌아갑니다.
+Talk to the coding agents in your [Orca](https://github.com/stablyai/orca) terminals from Even Realities G2 glasses.
 
-## 시작하기
+Even Orca is a small macOS bridge between the Terminal mode of the Even Realities app and Claude Code or Codex sessions running in Orca. It cleans up what the G2 heard, using your own dictionary and the recent prompts of the same session, submits the prompt to the chosen session, and streams the agent's progress and answers back to the glasses.
 
-Node.js 22.18 이상, Orca, 기존에 설정한 `claude` 또는 `codex` CLI, OpenAI API 키가 필요합니다. Mac과 휴대폰은 같은 사설 네트워크에 연결합니다.
+[한국어](README.ko.md)
 
-아래 예시는 저장소를 `~/even-orca`에 받는다고 가정합니다. 다른 위치라면 경로를 바꿔 실행하세요.
+## Screenshots
+
+**Settings** — pair the G2, choose which Orca terminals it can use, and configure prompt correction.
+
+<img src="docs/images/settings.png" alt="Even Orca settings page" width="560">
+
+**G2 preview** — what the glasses show, redrawn on the Mac with the G2 firmware font metrics.
+
+<img src="docs/images/preview.png" alt="G2 preview of an agent answer" width="640">
+
+## Features
+
+- **Prompt correction.** Fixes speech-recognition errors before submitting, using an OpenAI model, a personal dictionary, and the last prompts of the same session. Numbers, code literals, flags, and negations are preserved; a failed or unsafe correction is never submitted.
+- **Attach to open Orca terminals.** Pick any Claude Code session already running in Orca from the settings page. No wrapper command needed.
+- **Wrapper mode.** Launch Claude Code or Codex through `even-orca` for full Even Terminal support, including answering permission prompts from the glasses.
+- **Safe delivery.** One submission per request, no resends after an uncertain write, and prompts are held while the agent is busy or waiting for a permission answer.
+- **Readable on the glasses.** Tool-run lines are hidden by default so the agent's narration stays visible, and each answer paragraph starts with a `•` marker.
+- **G2 preview.** A Mac page that approximates the glasses display (576×288), using the G2 firmware font metrics, so you can check layout without capturing the real screen.
+- **Settings page.** OpenAI key, model, and reasoning effort; dictionary; recent voice input; pairing QR. Available in English and Korean.
+
+## Requirements
+
+- macOS on the same private network as your phone
+- [Node.js](https://nodejs.org) 22.18 or later
+- [Orca](https://github.com/stablyai/orca), with the `orca` CLI (bundled with the app)
+- [Claude Code](https://claude.com/claude-code) (`claude`) or the Codex CLI (`codex`), already signed in
+- Even Realities G2 glasses and the Even Realities app with Terminal mode
+- An [OpenAI API key](https://platform.openai.com/api-keys) for prompt correction
+
+## Installation
 
 ```sh
 git clone https://github.com/sayzard/even-orca.git ~/even-orca
 cd ~/even-orca
 npm ci
-test -f .env || cp .env.example .env
-chmod 600 .env
 ```
 
-`.env`의 `OPENAI_API_KEY` 또는 `EVEN_ORCA_OPENAI_API_KEY`에 OpenAI API 키를 넣은 뒤 `npm start`를 실행합니다. 터미널이나 [Mac 설정 화면](http://127.0.0.1:3466/settings)의 **G2 연결 QR**을 Even Realities 앱의 **Terminal**에서 스캔합니다. Codex를 기본 제공자로 쓰려면 `.env`에 `EVEN_ORCA_PROVIDER=codex`를 지정합니다.
+The examples below assume the repository lives in `~/even-orca`.
 
-Orca에서는 작업하려는 워크스페이스의 터미널에서 아래 중 하나를 실행합니다.
+## Usage
+
+### 1. Start the bridge
+
+```sh
+npm start
+```
+
+The bridge prints a pairing QR code, the settings URL, and the Claude Code terminals it found in Orca.
+
+### 2. Add your OpenAI API key
+
+Open the settings page at <http://127.0.0.1:3466> on the Mac. Under **Prompt correction → OpenAI settings**, enter your API key and select **Save settings**. The key is written to the project's `.env` file and cannot be read back from the page. Until a key is set, prompts from the glasses are held.
+
+### 3. Pair the G2
+
+In the Even Realities app, open **Terminal** and scan the **G2 pairing QR** from the settings page (or from the terminal output). Pairing is kept across bridge restarts.
+
+### 4. Connect an agent session
+
+**Attach to an open Orca terminal (Claude Code).** In **Orca terminals** on the settings page, select **Link to G2** next to a Claude Code session. Linked sessions appear in the Even app and are linked again when the bridge restarts, as long as they are still open in Orca.
+
+**Or launch through the wrapper.** In an Orca terminal, in the workspace you want to work in:
 
 ```sh
 ~/even-orca/bin/even-orca.mjs claude
 ~/even-orca/bin/even-orca.mjs codex
 ```
 
-기존 대화는 같은 워크스페이스에서 에이전트의 세션 UUID를 지정해 엽니다. 기존 CLI 인스턴스에서 같은 세션을 열어 둔 경우 먼저 그 인스턴스를 종료합니다.
+To reopen an existing conversation, pass its session ID. Close any other CLI instance that has the same session open first.
 
 ```sh
 ~/even-orca/bin/even-orca.mjs claude --resume <session-id>
 ~/even-orca/bin/even-orca.mjs codex resume <session-id>
 ```
 
-Even 앱에서 연결된 세션을 선택합니다. 새 Claude 세션이 목록에 바로 나오지 않으면 Orca에서 한 번 입력해 세션을 등록합니다. Codex에서 다른 대화로 바꿀 때는 연동 명령으로 해당 세션을 다시 엽니다. 음성 입력 중에는 Orca 입력창에 작성 중인 문장을 먼저 제출하거나 지워 두세요.
+Then select the session in the Even app and speak. Before dictating, submit or clear any text you have typed into the Orca prompt.
 
-브리지 기본 포트는 `3466`, 로컬 Codex 앱 서버의 포트는 `8766`입니다. 충돌하거나 다른 네트워크 인터페이스를 사용해야 하면 [.env.example](.env.example)의 설정으로 바꿀 수 있습니다. 기존 Even Terminal 전역 설치와 페어링 설정은 별도로 유지됩니다.
+### 5. Check the display (optional)
 
-### 이미 열려 있는 Orca 터미널에 연결
+Open the **G2 preview** at <http://127.0.0.1:3466/preview>. It redraws what the bridge sends to the glasses with the G2 firmware glyph widths, word wrapping, and the Terminal mode markers (`>` for answers, `/` for your prompts).
 
-연동 명령 없이 Orca에서 실행 중인 Claude Code 세션을 그대로 쓸 수도 있습니다. `npm start`를 실행하면 Orca에 열린 Claude Code 터미널을 찾아 터미널에 보여 줍니다. [Mac 설정 화면](http://127.0.0.1:3466/settings)의 **Orca 터미널**에서 G2에 쓸 터미널을 **G2에 연결**하면 Even 앱 세션 목록에 나타납니다. 고른 세션은 `~/.config/even-orca/orca.json`에 저장되어, 브리지를 다시 시작해도 그 세션이 Orca에 열려 있으면 다시 연결됩니다.
+## Configuration
 
-- Claude Code가 실행 중인 터미널만 목록에 나옵니다. 일반 쉘 터미널에는 음성 문장이 명령어로 실행될 수 있어 제외합니다.
-- 프롬프트는 `orca terminal send`로 제출하고, 답변은 세션의 대화 기록에서 읽어 G2로 보냅니다. Orca에서 직접 입력한 턴도 G2에 표시됩니다.
-- 권한 요청, 선택 질문, 중단은 G2에서 처리하지 않습니다. G2에 알림이 오면 Orca 터미널에서 응답합니다. 이 기능이 필요하면 연동 명령으로 세션을 여세요.
-- 터미널이 닫히거나 그 안의 프로세스가 바뀌면 연결이 풀리고 입력을 보내지 않습니다.
-- Orca CLI는 `/Applications/Orca.app/Contents/Resources/bin/orca`를 사용합니다. 다른 위치라면 `EVEN_ORCA_ORCA_BIN`으로 지정합니다.
+### Settings page
 
-### G2 미리보기
+| Setting | Description |
+| --- | --- |
+| OpenAI API key | Write-only. Stored in `.env` as `EVEN_ORCA_OPENAI_API_KEY`. Checked against OpenAI before saving. |
+| OpenAI model / reasoning effort | Model used for correction. Defaults to `gpt-6.2-sol` with `low`; `gpt-6-luna` with `none` favors latency. |
+| Show tool runs on the G2 | Off by default. When on, `tool_start`/`tool_end` events are sent to the glasses. |
+| My dictionary | Correct spellings (for example `worktree`, `useAuth`), optionally with how they are usually misheard. |
+| Recent voice input | Raw and corrected text, processing time, and delivery status. |
 
-실제 안경 화면은 캡처할 수 없어서, Mac에서 [G2 미리보기](http://127.0.0.1:3466/preview)를 열면 브리지가 G2로 보내는 내용을 안경 화면(576×288)에 가깝게 그려 줍니다. 글자 폭과 자간은 Even의 G2 펌웨어 글꼴 측정값([@evenrealities/pretext](https://www.npmjs.com/package/@evenrealities/pretext), MIT)을 쓰고, 단어 단위 줄바꿈과 `>`·`/` 표시, 빈 줄과 마크다운 강조 제거는 실제 안경과 비교해 맞췄습니다. 글자 모양은 Mac 글꼴이라 실제와 다르고, 일부 줄바꿈이 한 단어 정도 다를 수 있습니다.
+Settings are stored in `~/.config/even-orca/settings.json`.
 
-## 사전 및 모델
+### Environment variables
 
-Mac에서 [Even Orca 설정](http://127.0.0.1:3466/settings)을 엽니다. 기본 보정 모델은 `gpt-6.2-sol`, effort는 `low`입니다. 짧은 발화에서 지연을 우선할 때는 `gpt-6-luna` / `none`을 선택할 수 있습니다. 모델과 effort를 저장하면 다음 입력부터 적용됩니다. 에이전트 자체의 모델은 Orca에서 사용 중인 CLI 설정을 따릅니다.
+Set these in `.env` (see [`.env.example`](.env.example)) or in the environment.
 
-- **표준 표기**에 `worktree`, `useAuth`, `Even Hub`처럼 자주 쓰는 이름을 추가합니다. 같은 방식으로 잘못 인식되는 단어는 **오인식 표기**도 등록합니다.
-- G2에는 기본적으로 에이전트의 진행 메시지와 답변만 보냅니다. Bash, Read 같은 도구 실행 줄까지 보려면 **G2에 도구 실행 표시**를 켭니다.
-- **최근 음성 입력**에서 원문, 보정문, Mac 처리 시간, 제출 여부를 확인합니다. 선택한 오인식 구절을 **사전에 추가**로 가져올 수 있습니다.
-- OpenAI에는 현재 인식 문장, 관련 사전 항목, 같은 세션에서 최근에 제출한 사용자 입력 최대 5건을 보냅니다. 에이전트 답변과 오디오는 이 보정 요청에 포함되지 않습니다. Even 앱에서 직접 입력한 텍스트가 음성과 동일한 프롬프트 API로 들어오면 같은 보정을 적용합니다.
-- 보정 실패, 작업 중인 세션, 권한 대기 상태에서는 제출을 보류합니다. 제출 여부가 미확인으로 표시되면 먼저 Orca에서 입력 기록을 확인합니다.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EVEN_ORCA_OPENAI_API_KEY` | — | OpenAI API key. `OPENAI_API_KEY` is used as a fallback. |
+| `EVEN_ORCA_PORT` | `3466` | Bridge port. |
+| `EVEN_ORCA_CODEX_PORT` | `8766` | Local Codex app-server port. |
+| `EVEN_ORCA_LAN` | first private IPv4 | LAN address for the phone, or `off` for Mac-only mode. |
+| `EVEN_ORCA_PROVIDER` | `claude` | Default agent: `claude` or `codex`. |
+| `EVEN_ORCA_ORCA_BIN` | Orca app bundle | Path to the `orca` CLI. |
+| `EVEN_ORCA_STATE_DIR` | `~/.config/even-orca` | Where settings, pairing, and linked sessions are stored. |
 
-사전과 모델 설정은 Mac의 `~/.config/even-orca/settings.json`에 저장됩니다. 최근 입력 목록은 브리지가 실행되는 동안 Mac에서만 볼 수 있습니다.
+## How it works
 
-## 확인 방법
-
-```sh
-npm run check
-npm test
+```
+ G2 glasses ⇄ Even app (Terminal mode) ⇄ Even Orca bridge (Mac) ⇄ Claude Code / Codex in Orca
+                                            │
+                                            └─ OpenAI (prompt correction only)
 ```
 
-자동 테스트는 OpenAI 모의 응답과 Even Terminal의 Claude 전송 프로토콜을 이용해 사전 교정, 최근 입력 분리, 숫자·명령어·부정 표현 보존, 권한 대기, 중복 방지, SSE 답변 반환을 확인합니다.
+1. The Even app records your voice, recognizes it, and sends the text to the bridge over the local network.
+2. The bridge applies your dictionary, asks OpenAI for minimal edits using the session's recent prompts, and rejects edits that change numbers, code, or meaning.
+3. The corrected prompt is submitted once: through the Even Terminal wrapper, or with `orca terminal send` for attached Orca terminals.
+4. Replies are read from the agent's transcript and streamed back to the glasses.
 
-실기기에서는 Orca에 먼저 `src/auth.ts의 로그인 테스트를 확인해`처럼 문맥을 넣고, `워크 트리` 같은 오인식 패턴을 등록합니다. G2에서 같은 대상에 대해 발화한 뒤 녹음을 종료해 다음을 확인합니다.
+The Even Terminal protocol comes from [`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal). Attached sessions are discovered through the Orca CLI and Claude Code's session records.
 
-1. 보정된 문장이 Orca 세션에 한 번 제출된다.
-2. G2에서 제출된 문장과 에이전트 답변을 확인할 수 있다.
-3. 다른 Orca 세션에서는 앞 세션의 용어와 입력 기록이 보정에 섞이지 않는다.
-4. API 키나 모델 설정 오류가 발생하면 Orca로 입력이 전달되지 않는다.
+## Privacy and security
+
+- OpenAI receives only the recognized sentence, matching dictionary entries, and up to five recent prompts from the same session. Agent answers and audio are never sent.
+- The settings page, preview, and key endpoint listen on `127.0.0.1` only. The phone API on the LAN requires the pairing token.
+- Only terminals that Orca reports as running Claude Code can be linked, so dictated text never goes to a plain shell.
+
+## Limitations
+
+- Attaching to open Orca terminals supports Claude Code only. Use the wrapper for Codex.
+- For attached sessions, permission prompts, questions, and interrupts are answered in Orca; the glasses show a notification.
+- Session discovery relies on Claude Code's local session records, which may change between Claude Code versions.
+- The G2 preview is an approximation: glyph shapes come from the Mac's fonts, and a line may occasionally wrap one word differently.
+
+## Development
+
+```sh
+npm run check        # type-check
+npm test             # unit and integration tests
+npm run screenshots  # regenerate docs/images with demo data (needs Google Chrome)
+```
+
+Tests cover correction safeguards, single delivery, the Even Terminal wrapper protocol, Orca attach with a simulated Orca CLI, and the write-only key store.
+
+## License
+
+[MIT](LICENSE)
+
+Uses [`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal) and [`@evenrealities/pretext`](https://www.npmjs.com/package/@evenrealities/pretext) (MIT). Even Realities, G2, Orca, Claude Code, and Codex are trademarks of their respective owners; this project is not affiliated with them.
