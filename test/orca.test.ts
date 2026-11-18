@@ -174,6 +174,20 @@ test('Orca terminals: discovery, G2 prompt delivery, reply mirroring, and refusa
     assert.ok(history.history.some(row => row.role === 'assistant' && row.text === '• 직접 답변'));
     assert.ok(history.history.some(row => row.role === 'user' && row.text === 'Orca에서 직접 입력'));
 
+    // The Mac-only preview sees exactly what the phone receives.
+    assert.equal((await fetch(`${mac.url}/preview`)).status, 200);
+    assert.equal((await fetch(`${phoneHttp.url}/local/preview-feed`)).status, 404);
+    const feed = await fetch(`${mac.url}/local/preview-feed?after=0`).then(response => response.json()) as {
+      sessionId: string; sessions: { id: string; label: string }[]; messages: { id: number; type: string; text?: string }[];
+    };
+    assert.equal(feed.sessionId, session);
+    assert.deepEqual(feed.sessions.map(item => item.label), ['테스트 세션']);
+    const texts = feed.messages.filter(message => message.type === 'text_delta').map(message => message.text);
+    assert.deepEqual(texts, ['• OK', '• 직접 답변']);
+    assert.equal(feed.messages.some(message => message.type.startsWith('tool_')), false);
+    const later = await fetch(`${mac.url}/local/preview-feed?after=${feed.messages.at(-1)!.id}`).then(response => response.json()) as { messages: unknown[] };
+    assert.equal(later.messages.length, 0);
+
     const interrupt = await fetch(`${phoneHttp.url}/api/interrupt`, {
       method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session }),
     });

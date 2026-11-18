@@ -240,6 +240,24 @@ export function createApps(options: {
   });
   local.post('/local/orca/attach', express.json({ limit: '2kb' }), orcaChange(id => even.orca.attach(id)));
   local.post('/local/orca/detach', express.json({ limit: '2kb' }), orcaChange(id => even.orca.detach(id)));
+  // Mac-only G2 preview: the exact messages the phone receives, for a page
+  // that approximates the glasses display (the real one cannot be captured).
+  local.get('/preview', (_req, res) => res.sendFile('preview.html', { root: publicPath }));
+  local.get('/local/preview-feed', async (req, res) => {
+    const targets = [...sessions.list('claude'), ...sessions.list('codex')];
+    const target = targets.find(item => item.id === req.query.sessionId) ?? targets[0];
+    if (!target) return res.json({ sessions: [], messages: [] });
+    const after = Math.max(0, Number(req.query.after) || 0);
+    // The paragraph marker depends on earlier messages, so rewrite from the start.
+    const view = phoneView(hiddenEvents);
+    const messages = sessions.messages(target.id, 0).flatMap(message => view(message) ?? []).filter(message => message.id > after);
+    return res.json({
+      sessionId: target.id,
+      state: await sessions.status(target).catch(() => 'disconnected'),
+      sessions: targets.map(item => ({ id: item.id, label: item.label ?? basename(item.cwd), provider: item.provider })),
+      messages,
+    });
+  });
   local.get('/local/activity', (_req, res) => res.json({
     activity: submission.activity(),
     targets: [...sessions.list('claude'), ...sessions.list('codex')].map(({ id, provider, cwd }) => ({ id, provider, cwd })),
