@@ -157,4 +157,4 @@ npm run screenshots  # 예시 데이터로 docs/images 다시 생성(Google Chro
 
 [MIT](LICENSE)
 
-[`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal)과 [`@evenrealities/pretext`](https://www.npmjs.com/package/@evenrealities/pretext)(MIT)를 사용합니다. Even Realities, G2, Orca, Claude Code, Codex는 각 소유자의 상표이며, 이 프로젝트는 그들과 관련이 없습니다.
+Even Terminal 프로토콜은 [`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal)을 npm에서 받아 그 패키지의 조건에 따라 씁니다. G2 글꼴 정보는 [`@evenrealities/pretext`](https://www.npmjs.com/package/@evenrealities/pretext)(MIT)를 씁니다. 두 패키지 모두 이 저장소에 포함되어 있지 않습니다. Even Realities, G2, Orca, Claude Code, Codex는 각 소유자의 상표이며, 이 프로젝트는 그들과 관련이 없습니다.

@@ -157,4 +157,4 @@ Tests cover correction safeguards, single delivery, the Even Terminal wrapper pr
 
 [MIT](LICENSE)
 
-Uses [`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal) and [`@evenrealities/pretext`](https://www.npmjs.com/package/@evenrealities/pretext) (MIT). Even Realities, G2, Orca, Claude Code, and Codex are trademarks of their respective owners; this project is not affiliated with them.
+The Even Terminal protocol comes from [`@evenrealities/even-terminal`](https://www.npmjs.com/package/@evenrealities/even-terminal), installed from npm under its own terms. G2 font metrics come from [`@evenrealities/pretext`](https://www.npmjs.com/package/@evenrealities/pretext) (MIT). Neither package is redistributed in this repository. Even Realities, G2, Orca, Claude Code, and Codex are trademarks of their respective owners; this project is not affiliated with them.
