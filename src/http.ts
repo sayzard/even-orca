@@ -22,8 +22,9 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
 const toolEvents = new Set(['tool_start', 'tool_end']);
 const sseEvent = /^id: (\d+)\ndata: (\{.*\})\n\n$/su;
 // Marks where each agent paragraph starts on the G2, like Claude Code's ⏺.
-// ⏺ (U+23FA) is missing from the G2 firmware fonts; ● is in its CJK font.
-export const replyMarker = '● ';
+// ⏺ (U+23FA) is missing from the G2 firmware fonts, and ● renders at full CJK
+// width (20px); • is in the Latin font at 9px.
+export const replyMarker = '• ';
 
 interface StreamMessage { type?: unknown; state?: unknown; text?: unknown }
 

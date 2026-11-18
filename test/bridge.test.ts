@@ -265,7 +265,7 @@ test('Even protocol binds a real Claude wrapper transport and streams its reply'
     assert.match(data, /worktree를 확인해/);
     assert.match(data, /"state":"idle"/);
     assert.doesNotMatch(data, /"type":"tool_(?:start|end)"/);
-    assert.match(data, /"type":"text_delta","text":"● worktree 확인 완료"/);
+    assert.match(data, /"type":"text_delta","text":"• worktree 확인 완료"/);
     assert.match(data, /"type":"result","success":true,"text":"worktree 확인 완료"/);
     const types = async () => (await fetch(`${phoneHttp.url}/api/messages?sessionId=${a}&provider=claude`, { headers: auth })
       .then(response => response.json()) as { messages: { type: string }[] }).messages.map(message => message.type);
