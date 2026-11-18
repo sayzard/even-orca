@@ -20,25 +20,48 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
 };
 
 const toolEvents = new Set(['tool_start', 'tool_end']);
-const sseEvent = /^id: \d+\ndata: (\{.*\})\n\n$/su;
+const sseEvent = /^id: (\d+)\ndata: (\{.*\})\n\n$/su;
+// Marks where each agent paragraph starts on the G2, like Claude Code's ⏺.
+// ⏺ (U+23FA) is missing from the G2 firmware fonts; ● is in its CJK font.
+export const replyMarker = '● ';
+
+interface StreamMessage { type?: unknown; state?: unknown; text?: unknown }
+
+/**
+ * Per-stream rewrite of messages bound for the phone: drops hidden types and
+ * marks the first text chunk of each agent paragraph. A paragraph starts at a
+ * `status: text_start`, so providers that stream many chunks per paragraph
+ * get one marker.
+ */
+function phoneView(hidden: () => Set<string> | undefined) {
+  let paragraph = false;
+  return <T extends StreamMessage>(message: T): T | undefined => {
+    if (message.type === 'status' && message.state === 'text_start') paragraph = true;
+    if (typeof message.type === 'string' && hidden()?.has(message.type)) return undefined;
+    if (message.type === 'text_delta' && typeof message.text === 'string' && paragraph) {
+      paragraph = false;
+      return { ...message, text: replyMarker + message.text.replace(/^\s+/u, '') };
+    }
+    return message;
+  };
+}
 
 // The pinned Even events router writes each SSE event (live and replayed) as
-// one `id: N\ndata: {json}\n\n` chunk, so whole events can be dropped here.
-function omitEvents(res: Response, hidden: () => Set<string> | undefined) {
+// one `id: N\ndata: {json}\n\n` chunk, so whole events can be rewritten here.
+function rewriteEvents(res: Response, view: ReturnType<typeof phoneView>) {
   const write = res.write.bind(res) as (chunk: unknown, ...rest: unknown[]) => boolean;
   res.write = ((chunk: unknown, ...rest: unknown[]) => {
-    const types = hidden();
-    const event = types && typeof chunk === 'string' ? sseEvent.exec(chunk) : null;
-    if (event) {
-      let type: unknown;
-      try { type = (JSON.parse(event[1]) as { type?: unknown }).type; } catch { type = undefined; }
-      if (typeof type === 'string' && types!.has(type)) {
-        const done = rest.find(item => typeof item === 'function') as (() => void) | undefined;
-        done?.();
-        return true;
-      }
+    const event = typeof chunk === 'string' ? sseEvent.exec(chunk) : null;
+    if (!event) return write(chunk, ...rest);
+    let message: StreamMessage;
+    try { message = JSON.parse(event[2]) as StreamMessage; } catch { return write(chunk, ...rest); }
+    const shown = view(message);
+    if (!shown) {
+      const done = rest.find(item => typeof item === 'function') as (() => void) | undefined;
+      done?.();
+      return true;
     }
-    return write(chunk, ...rest);
+    return write(shown === message ? chunk : `id: ${event[1]}\ndata: ${JSON.stringify(shown)}\n\n`, ...rest);
   }) as typeof res.write;
 }
 
@@ -132,7 +155,8 @@ export function createApps(options: {
   api.get('/sessions/:id/history', async (req, res) => {
     const destination = active(req.params.id, providerForSession(req.query.provider, req.params.id));
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 10, 10));
-    const history = await sessions.history(destination, limit);
+    const history = (await sessions.history(destination, limit)).map(row => row.role === 'assistant' && row.text.trim()
+      ? { ...row, text: replyMarker + row.text.replace(/^\s+/u, '') } : row);
     res.json({ history });
   });
   api.get('/status', async (req, res) => {
@@ -142,8 +166,8 @@ export function createApps(options: {
   api.get('/messages', async (req, res) => {
     const destination = active(req.query.sessionId, providerForSession(req.query.provider, req.query.sessionId));
     const after = Math.max(0, Number(req.query.after) || 0);
-    const hidden = hiddenEvents();
-    const messages = sessions.messages(destination.id, after).filter(message => !hidden?.has(message.type));
+    const view = phoneView(hiddenEvents);
+    const messages = sessions.messages(destination.id, after).flatMap(message => view(message) ?? []);
     res.json({ messages, state: await sessions.status(destination), sessionId: destination.id, provider: destination.provider });
   });
   api.get('/events', (req, res, next) => {
@@ -156,7 +180,7 @@ export function createApps(options: {
     else if (!sessions.target('claude', id) && !sessions.target('codex', id)) {
       throw new RequestError(409, '선택한 Orca 세션이 연결되어 있지 않습니다.');
     }
-    omitEvents(res, hiddenEvents);
+    rewriteEvents(res, phoneView(hiddenEvents));
     even.events(req, res, next);
   });
   api.use((req, res, next) => {

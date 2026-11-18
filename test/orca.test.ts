@@ -153,7 +153,7 @@ test('Orca terminals: discovery, G2 prompt delivery, reply mirroring, and refusa
     state.status = 'idle';
     await until(/"state":"idle"/);
     assert.match(data, /"type":"user_prompt","text":"OK라고 답해"/);
-    assert.match(data, /"type":"text_delta","text":"OK"/);
+    assert.match(data, /"type":"text_delta","text":"● OK"/);
     assert.match(data, /"type":"result","success":true,"text":"OK"/);
     assert.doesNotMatch(data, /이전 답변/);
     assert.doesNotMatch(data, /"type":"tool_(?:start|end)"/);
@@ -168,6 +168,11 @@ test('Orca terminals: discovery, G2 prompt delivery, reply mirroring, and refusa
     state.status = 'idle';
     await until(/직접 답변[\s\S]*"state":"idle"/);
     assert.match(data, /"type":"user_prompt","text":"Orca에서 직접 입력"/);
+    assert.match(data, /"type":"text_delta","text":"● 직접 답변"/);
+    const history = await fetch(`${phoneHttp.url}/api/sessions/${session}/history?limit=10`, { headers: auth })
+      .then(response => response.json()) as { history: { role: string; text: string }[] };
+    assert.ok(history.history.some(row => row.role === 'assistant' && row.text === '● 직접 답변'));
+    assert.ok(history.history.some(row => row.role === 'user' && row.text === 'Orca에서 직접 입력'));
 
     const interrupt = await fetch(`${phoneHttp.url}/api/interrupt`, {
       method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session }),
