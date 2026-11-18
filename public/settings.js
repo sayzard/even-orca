@@ -32,6 +32,7 @@ async function loadSettings() {
   const configuration = await read('/local/settings');
   get('model').value = configuration.model;
   get('effort').value = configuration.effort;
+  get('show-tools').checked = configuration.showTools;
   terms.replaceChildren();
   for (const term of configuration.terms) addTerm(term.heard, term.preferred);
 }
@@ -45,6 +46,7 @@ get('settings').addEventListener('submit', async event => {
   event.preventDefault();
   const configuration = {
     model: get('model').value.trim(), effort: get('effort').value,
+    showTools: get('show-tools').checked,
     terms: Array.from(terms.children, row => ({
       heard: row.querySelector('[name="heard"]').value,
       preferred: row.querySelector('[name="preferred"]').value,
@@ -70,6 +72,15 @@ function append(parent, tag, value, className) {
 
 let activitySignature = '';
 const pairing = get('pairing');
+// First-time users need the QR, so it starts open for the first few visits.
+const visits = (() => {
+  try {
+    const count = Number(localStorage.getItem('even-orca:visits')) || 0;
+    localStorage.setItem('even-orca:visits', String(count + 1));
+    return count;
+  } catch { return 0; }
+})();
+let pairingShown = false;
 pairing.addEventListener('toggle', () => {
   const qr = pairing.querySelector('img');
   if (pairing.open && !qr.hasAttribute('src')) qr.src = '/local/pairing.svg';
@@ -78,6 +89,10 @@ async function refresh() {
   try {
     const { activity, targets, pairingAvailable } = await read('/local/activity');
     pairing.hidden = !pairingAvailable;
+    if (pairingAvailable && !pairingShown) {
+      pairingShown = true;
+      if (visits < 5) pairing.open = true;
+    }
     get('connection').textContent = targets.length ? `Orca 세션 ${targets.length}개 연결됨` : '연결된 Orca 세션이 없습니다.';
     const signature = JSON.stringify(activity);
     if (signature === activitySignature) return;
@@ -103,7 +118,53 @@ async function refresh() {
   } catch (error) { get('connection').textContent = error.message; }
 }
 
+const linkStates = { idle: '대기 중', busy: '작업 중', awaiting: 'Orca에서 응답 대기', disconnected: '연결 끊김' };
+let orcaBusy = false;
+async function refreshOrca() {
+  if (orcaBusy) return;
+  orcaBusy = true;
+  const list = get('orca-list');
+  const empty = get('orca-empty');
+  try {
+    const { terminals, error } = await read('/local/orca');
+    list.replaceChildren();
+    empty.hidden = terminals.length > 0;
+    empty.textContent = error ? `Orca: ${error}` : '열려 있는 Claude Code 터미널이 없습니다.';
+    for (const item of terminals) {
+      const row = append(list, 'li', '');
+      const info = append(row, 'div', '', 'orca-info');
+      append(info, 'strong', item.title);
+      append(info, 'span', `${item.cwd} · ${item.sessionId.slice(-8)} · ${linkStates[item.status] ?? item.status}`, 'muted');
+      if (item.wrapped) {
+        append(row, 'span', 'Even 래퍼로 연결됨', 'badge');
+        continue;
+      }
+      const button = append(row, 'button', item.attached ? '연결 해제' : 'G2에 연결', item.attached ? 'secondary' : '');
+      button.type = 'button';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const response = await fetch(`/local/orca/${item.attached ? 'detach' : 'attach'}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Even-Orca-Settings': '1' },
+            body: JSON.stringify({ sessionId: item.sessionId }),
+          });
+          if (!response.ok) throw new Error((await response.json()).error);
+        } catch (error) { message(error.message, true); }
+        orcaBusy = false;
+        await refreshOrca();
+        void refresh();
+      });
+    }
+  } catch (error) {
+    empty.hidden = false;
+    empty.textContent = error.message;
+  } finally { orcaBusy = false; }
+}
+
 get('refresh').addEventListener('click', refresh);
+get('orca-refresh').addEventListener('click', refreshOrca);
 loadSettings().catch(error => message(error.message, true));
 void refresh();
+void refreshOrca();
 setInterval(() => { if (!document.hidden) void refresh(); }, 2500);
+setInterval(() => { if (!document.hidden) void refreshOrca(); }, 6000);

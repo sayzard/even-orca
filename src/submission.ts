@@ -4,6 +4,7 @@ import type { Provider, Settings } from './config.ts';
 import { correct, validPrompt } from './correction.ts';
 import type { SuggestEdits } from './correction.ts';
 import type { Sessions, Target } from './sessions.ts';
+import { NotDelivered } from './orca.ts';
 
 export class RequestError extends Error {
   status: number;
@@ -68,9 +69,11 @@ export function createSubmission(sessions: Sessions, getSettings: () => Settings
     activity.unshift(entry);
     activity.length = Math.min(activity.length, 20);
     let sending = false;
+    let claimed: Target | undefined;
     try {
       const destination = sessions.target(provider, id);
       if (!destination) throw new RequestError(409, 'Orca 세션이 연결되어 있지 않습니다.');
+      claimed = destination;
       if (uncertain.has(destination.identity)) throw new RequestError(409, '이전 입력 전달을 확인할 수 없습니다. Orca에서 확인하고 연동 세션을 다시 여세요.');
       const assertIdle = async () => {
         const status = await withTimeout(sessions.status(destination), 2000).catch(() => 'disconnected');
@@ -89,15 +92,19 @@ export function createSubmission(sessions: Sessions, getSettings: () => Settings
       const cursor = sessions.messages(id, 0).at(-1)?.id ?? 0;
       uncertain.add(destination.identity);
       sending = true;
-      const result = await withTimeout(sessions.send(destination, entry.corrected), 5000);
+      // Orca's own delivery check waits up to 8 seconds for the turn to start.
+      const result = await withTimeout(sessions.send(destination, entry.corrected), destination.via === 'orca' ? 20_000 : 5000);
       if (result.sessionId !== id) throw new Error('Session receipt did not match');
       entry.status = 'accepted';
       void observe(entry, destination, cursor, entry.corrected);
       return { ok: true, ...result };
     } catch (error) {
-      entry.status = sending ? 'unknown' : 'held';
-      const failure = sending
-        ? new RequestError(502, 'Orca에 입력이 전달됐는지 확인할 수 없습니다. Orca에서 확인하세요.')
+      // A refusal from Orca (or a failed pre-send check) proves nothing was written.
+      const refused = error instanceof NotDelivered;
+      if (refused && claimed) uncertain.delete(claimed.identity);
+      entry.status = sending && !refused ? 'unknown' : 'held';
+      const failure = refused ? new RequestError(409, error.message)
+        : sending ? new RequestError(502, 'Orca에 입력이 전달됐는지 확인할 수 없습니다. Orca에서 확인하세요.')
         : error instanceof RequestError ? error : new RequestError(503, 'Orca 입력을 보류했습니다.');
       entry.detail = failure.message;
       throw failure;

@@ -66,6 +66,13 @@ test('dictionary, context, and explicit self-correction preserve coding literals
   assert.equal(result, 'worktree를 확인하고 src/auth.ts에서 2개 변경해. --dry-run으로 하고 배포하지 마.');
 });
 
+test('tool events stay off the G2 stream unless enabled, including for older settings files', () => {
+  const { showTools: _omitted, ...older } = defaultSettings;
+  assert.equal(parseSettings(older).showTools, false);
+  assert.equal(parseSettings({ ...defaultSettings, showTools: true }).showTools, true);
+  assert.throws(() => parseSettings({ ...defaultSettings, showTools: 'yes' }), /도구 실행 표시/);
+});
+
 test('keeps accurate and ambiguous text, including literals and protected prefixes', async () => {
   const raw = '`fooBar`를 3회 호출해. 설정 설정을 확인해.';
   const result = await correct(async () => [
@@ -220,6 +227,9 @@ test('Even protocol binds a real Claude wrapper transport and streams its reply'
   assert.equal((await fetch(`${phoneHttp.url}/settings`)).status, 404);
   assert.equal((await fetch(`${phoneHttp.url}/api/sessions`)).status, 401);
   assert.equal((await fetch(`${url}/settings`)).status, 200);
+  const root = await fetch(`${url}/`, { redirect: 'manual' });
+  assert.deepEqual([root.status, root.headers.get('location')], [302, '/settings']);
+  assert.equal((await fetch(`${phoneHttp.url}/`, { redirect: 'manual' })).status, 404);
   assert.match(await fetch(`${url}/local/pairing.svg`).then(response => response.text()), /<svg/);
   assert.equal((await fetch(`${phoneHttp.url}/local/pairing.svg`)).status, 404);
   const changed = await fetch(`${url}/local/settings`, {
@@ -242,6 +252,8 @@ test('Even protocol binds a real Claude wrapper transport and streams its reply'
     for (let retry = 0; retry < 25 && input.length < 2; retry++) await delay(20);
     assert.deepEqual(input, ['\x1b[200~worktree를 확인해\x1b[201~', '\r']);
     assert.equal((await hook('UserPromptSubmit', { prompt: 'worktree를 확인해' })).status, 204);
+    even.emit(a, { type: 'tool_start', name: 'Bash', toolId: 'tool-1' });
+    even.emit(a, { type: 'tool_end', name: 'Bash', toolId: 'tool-1', summary: 'Bash ls' });
     assert.equal((await hook('Stop', { last_assistant_message: 'worktree 확인 완료' })).status, 204);
     const decoder = new TextDecoder();
     let data = '';
@@ -252,5 +264,11 @@ test('Even protocol binds a real Claude wrapper transport and streams its reply'
     }
     assert.match(data, /worktree를 확인해/);
     assert.match(data, /"state":"idle"/);
+    assert.doesNotMatch(data, /"type":"tool_(?:start|end)"/);
+    const types = async () => (await fetch(`${phoneHttp.url}/api/messages?sessionId=${a}&provider=claude`, { headers: auth })
+      .then(response => response.json()) as { messages: { type: string }[] }).messages.map(message => message.type);
+    assert.equal((await types()).some(type => type.startsWith('tool_')), false);
+    settings.update({ ...settings.current(), showTools: true });
+    assert.deepEqual((await types()).filter(type => type.startsWith('tool_')), ['tool_start', 'tool_end']);
   } finally { await reader.cancel(); }
 });

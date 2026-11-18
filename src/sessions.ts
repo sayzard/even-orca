@@ -4,7 +4,10 @@ import { realpath } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import type { Server } from 'node:http';
 import type { Request, Response, Router } from 'express';
+import { readJson, stateDir, writeJson } from './config.ts';
 import type { Provider } from './config.ts';
+import { createOrcaHost, createOrcaLink } from './orca.ts';
+import type { OrcaHost, WrappedTurnClass } from './orca.ts';
 
 const require = createRequire(import.meta.url);
 export const evenPackage = dirname(require.resolve('@evenrealities/even-terminal/package.json'));
@@ -47,6 +50,9 @@ export interface Target {
   provider: Provider;
   cwd: string;
   identity: object;
+  /** Set for a Claude Code session attached through an Orca terminal. */
+  via?: 'orca';
+  label?: string;
 }
 
 function textFromBlocks(content: string | TextBlock[] | undefined) {
@@ -77,30 +83,49 @@ export interface Sessions {
   messages(id: string, after: number): EvenMessage[];
 }
 
-export async function loadEven() {
+export async function loadEven(options: { orcaHost?: OrcaHost; orcaFile?: string; orcaPollMs?: number } = {}) {
   // These paths and contracts belong to the pinned npm package. Keep all of
   // them in this adapter so package changes cannot affect prompt correction.
   const load = (path: string): Promise<unknown> => import(pathToFileURL(join(evenPackage, path)).href);
   const sdkPath = createRequire(join(evenPackage, 'package.json')).resolve('@anthropic-ai/claude-agent-sdk');
-  const [core, events, hook, startup, sdk] = await Promise.all([
+  const [core, events, hook, startup, sdk, wrapped] = await Promise.all([
     load('dist/routes/core.js'), load('dist/routes/events.js'),
     load('dist/claude-sync/hook-receiver.js'), load('dist/startup/common.js'),
     import(pathToFileURL(sdkPath).href) as Promise<unknown>,
+    load('dist/claude-sync/wrapped-session.js'),
   ]) as [
     { default: Router; getProvider(name: Provider): EvenProvider; codexClient: CodexClient; claudeSyncTransport: ClaudeTransport; emitBridgeMessage(id: string, message: object): void },
     { default: Router; getMessages(id: string, after: number): EvenMessage[] },
     { handleHookRequest(req: Request, res: Response, emit: typeof core.emitBridgeMessage, transport: ClaudeTransport): void },
     { printQRCode(text: string): void; stopCodexAppServer(): void },
     { getSessionMessages(id: string, options: { dir: string }): Promise<ClaudeMessage[]> },
+    { WrappedSession: WrappedTurnClass },
   ];
   const { codexClient, claudeSyncTransport } = core;
   const codexLeases = new Map<string, CodexLease>();
+  const orcaFile = options.orcaFile ?? join(stateDir, 'orca.json');
+  const orca = createOrcaLink({
+    host: options.orcaHost ?? createOrcaHost(),
+    emit: core.emitBridgeMessage,
+    WrappedTurn: wrapped.WrappedSession,
+    isWrapped: id => Boolean(claudeSyncTransport.wrapped(id)),
+    load: () => {
+      const saved = (readJson(orcaFile) as { sessions?: unknown } | undefined)?.sessions;
+      return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : [];
+    },
+    save: ids => writeJson(orcaFile, { sessions: ids }),
+    pollMs: options.orcaPollMs,
+  });
 
   function target(provider: Provider, id: string): Target | undefined {
     if (provider === 'claude') {
       const wrap = claudeSyncTransport.wrapped(id);
       const connection = [...claudeSyncTransport.wrappers.values()].find(item => item.sessionId === id);
       if (wrap && connection) return { id, provider, cwd: connection.cwd, identity: wrap };
+      // The wrapper has hooks for permissions and questions, so it wins when
+      // the same session is also attached through Orca.
+      const linked = orca.get(id);
+      if (linked) return { id, provider, cwd: linked.cwd, identity: linked, via: 'orca', label: linked.title };
       return undefined;
     }
     const lease = codexLeases.get(id);
@@ -116,7 +141,7 @@ export async function loadEven() {
     target,
     list(provider, cwd) {
       const ids = provider === 'claude'
-        ? [...claudeSyncTransport.wrappers.values()].map(wrapper => wrapper.sessionId)
+        ? [...new Set([...claudeSyncTransport.wrappers.values()].map(wrapper => wrapper.sessionId).concat(orca.list().map(session => session.id)))]
         : [...codexLeases.keys()];
       return ids.flatMap(id => {
         const active = id && target(provider, id);
@@ -125,6 +150,7 @@ export async function loadEven() {
     },
     async status(session) {
       if (target(session.provider, session.id)?.identity !== session.identity) return 'disconnected';
+      if (orca.owns(session.identity)) return session.identity.status();
       if (session.provider === 'claude') {
         const wrapper = session.identity as ClaudeWrap;
         return wrapper.submitting ? 'busy' : wrapper.status;
@@ -167,6 +193,10 @@ export async function loadEven() {
     },
     async send(session, text) {
       if (target(session.provider, session.id)?.identity !== session.identity) throw new Error('Session disconnected');
+      if (orca.owns(session.identity)) {
+        await session.identity.send(text);
+        return { sessionId: session.id, provider: 'claude' };
+      }
       if (session.provider === 'claude') {
         // Calling the bound wrapper avoids the official provider's fallback
         // to starting a separate SDK agent when the wrapper disappears.
@@ -182,13 +212,14 @@ export async function loadEven() {
 
   return {
     sessions,
+    orca,
     events: events.default,
     core: core.default,
     onHook: (req: Request, res: Response) => hook.handleHookRequest(req, res, core.emitBridgeMessage, claudeSyncTransport),
     attachClaude: (server: Server) => claudeSyncTransport.attach(server),
     emit: core.emitBridgeMessage,
     printQR: startup.printQRCode,
-    stop() { startup.stopCodexAppServer(); void codexClient.close().catch(() => {}); },
+    stop() { orca.stop(); startup.stopCodexAppServer(); void codexClient.close().catch(() => {}); },
     async enrollCodex(cwd: string, pid: number, resumeId?: string) {
       if (!running(pid)) throw new Error('Codex launcher has exited');
       await codexClient.connect();

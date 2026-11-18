@@ -78,7 +78,8 @@ async function serve() {
     even.printQR(pairingUrl.href);
     console.log(`Server: ${pairingUrl.origin}`);
   } else console.log('No private LAN address selected. Running in Mac-only mode.');
-  console.log(`Mac settings: http://127.0.0.1:${port}/settings`);
+  console.log(`Mac settings and G2 QR: http://127.0.0.1:${port}`);
+  await reportOrca(even.orca);
 
   function stop() {
     const current = readJson(runtimeFile) as Runtime | undefined;
@@ -90,6 +91,25 @@ async function serve() {
   }
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
+}
+
+async function reportOrca(orca: Awaited<ReturnType<typeof loadEven>>['orca']) {
+  try {
+    const restored = await orca.restore();
+    const found = await orca.discover();
+    if (!found.length) {
+      console.log('Orca: no Claude Code terminals found. Open one in Orca, then choose it in Mac settings.');
+      return;
+    }
+    console.log(`Orca: ${found.length} Claude Code terminal(s). Choose which ones the G2 can use in Mac settings.`);
+    for (const item of found) {
+      const mark = item.wrapped ? 'wrapper' : item.attached ? 'linked' : '-';
+      console.log(`  [${mark}] ${item.title} · ${item.cwd} · ${item.sessionId.slice(-8)} · ${item.status}`);
+    }
+    if (restored.length) console.log(`Orca: reattached ${restored.length} session(s) chosen earlier.`);
+  } catch (error) {
+    console.log(`Orca: ${error instanceof Error ? error.message : 'not reachable'} (terminal linking is unavailable until Orca runs).`);
+  }
 }
 
 function runtime() {

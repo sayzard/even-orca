@@ -17,7 +17,8 @@ h3 { font-size: 1rem; }
 .top p, .muted { color: var(--muted); font-size: .88rem; }
 section { background: #191f1b; border: 1px solid var(--border); padding: 24px; border-radius: 14px; margin: 0 0 16px; }
 #pairing { margin: 0 0 16px; }
-#pairing summary { cursor: pointer; width: fit-content; font-weight: 650; }
+#pairing summary { cursor: pointer; width: fit-content; font-size: 1.2rem; font-weight: 700; color: var(--accent); padding: 4px 0; }
+#pairing summary::marker { color: var(--accent); }
 #pairing p { margin: 8px 0; }
 #pairing img { display: block; border-radius: 10px; }
 .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
@@ -26,6 +27,8 @@ section { background: #191f1b; border: 1px solid var(--border); padding: 24px; b
 .term-row { grid-template-columns: 1fr 1fr auto; margin-top: 10px; }
 label { display: grid; gap: 4px; font-size: .86rem; min-width: 0; }
 label .muted { display: inline; }
+label.toggle { display: flex; align-items: center; gap: 8px; margin: 16px 0 3px; font-size: .92rem; cursor: pointer; }
+label.toggle input { width: 18px; min-height: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .term-row label { display: block; }
 input, select, button { font: inherit; border-radius: 8px; min-height: 39px; }
 input, select { display: block; width: 100%; padding: 7px 10px; color: inherit; background: #111714; border: 1px solid var(--border); }
@@ -41,6 +44,12 @@ button:hover { filter: brightness(1.12); }
 #activity li { border-top: 1px solid var(--border); padding: 12px 0; }
 #activity li:first-child { border-top: 0; }
 #activity p { overflow-wrap: anywhere; white-space: pre-wrap; }
+#orca-list { margin: 12px 0 0; padding: 0; list-style: none; }
+#orca-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding: 11px 0; }
+#orca-list li:first-child { border-top: 0; }
+.orca-info { display: grid; gap: 2px; min-width: 0; }
+.orca-info strong, .orca-info span { overflow-wrap: anywhere; }
+.badge { color: var(--muted); font-size: .82rem; white-space: nowrap; }
 .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 14px; }
 .transcript { margin-top: 5px; }
 .record-button { margin-top: 8px; }

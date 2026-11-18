@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { timingSafeEqual } from 'node:crypto';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ErrorRequestHandler, Request, RequestHandler } from 'express';
+import type { ErrorRequestHandler, Request, RequestHandler, Response } from 'express';
 import { agentName, validId } from './sessions.ts';
 import { RequestError } from './submission.ts';
 import type { Provider } from './config.ts';
@@ -18,6 +18,29 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   const status = error instanceof RequestError ? error.status : error?.type === 'entity.too.large' ? 413 : error instanceof SyntaxError ? 400 : 500;
   res.status(status).json({ error: error instanceof RequestError ? error.message : '요청을 처리하지 못했습니다.' });
 };
+
+const toolEvents = new Set(['tool_start', 'tool_end']);
+const sseEvent = /^id: \d+\ndata: (\{.*\})\n\n$/su;
+
+// The pinned Even events router writes each SSE event (live and replayed) as
+// one `id: N\ndata: {json}\n\n` chunk, so whole events can be dropped here.
+function omitEvents(res: Response, hidden: () => Set<string> | undefined) {
+  const write = res.write.bind(res) as (chunk: unknown, ...rest: unknown[]) => boolean;
+  res.write = ((chunk: unknown, ...rest: unknown[]) => {
+    const types = hidden();
+    const event = types && typeof chunk === 'string' ? sseEvent.exec(chunk) : null;
+    if (event) {
+      let type: unknown;
+      try { type = (JSON.parse(event[1]) as { type?: unknown }).type; } catch { type = undefined; }
+      if (typeof type === 'string' && types!.has(type)) {
+        const done = rest.find(item => typeof item === 'function') as (() => void) | undefined;
+        done?.();
+        return true;
+      }
+    }
+    return write(chunk, ...rest);
+  }) as typeof res.write;
+}
 
 function tokenMatches(value: unknown, expected: string) {
   if (typeof value !== 'string') return false;
@@ -42,6 +65,7 @@ export function createApps(options: {
 }) {
   const { even, submission, settings, token, adminToken, port, defaultProvider } = options;
   const { sessions } = even;
+  const hiddenEvents = () => settings.current().showTools ? undefined : toolEvents;
   const api = express.Router();
   const local = express();
   const phone = express();
@@ -84,7 +108,9 @@ export function createApps(options: {
       id: session.id,
       cwd: session.cwd,
       provider,
-      title: `${basename(session.cwd)} · ${provider === 'claude' ? 'Claude Code' : 'Codex'} · ${session.id.slice(-8)}`,
+      title: session.label
+        ? `${session.label} · Orca`
+        : `${basename(session.cwd)} · ${provider === 'claude' ? 'Claude Code' : 'Codex'} · ${session.id.slice(-8)}`,
       timestamp: new Date().toISOString(),
       status: await sessions.status(session).catch(() => 'disconnected'),
     })));
@@ -116,7 +142,8 @@ export function createApps(options: {
   api.get('/messages', async (req, res) => {
     const destination = active(req.query.sessionId, providerForSession(req.query.provider, req.query.sessionId));
     const after = Math.max(0, Number(req.query.after) || 0);
-    const messages = sessions.messages(destination.id, after);
+    const hidden = hiddenEvents();
+    const messages = sessions.messages(destination.id, after).filter(message => !hidden?.has(message.type));
     res.json({ messages, state: await sessions.status(destination), sessionId: destination.id, provider: destination.provider });
   });
   api.get('/events', (req, res, next) => {
@@ -129,6 +156,7 @@ export function createApps(options: {
     else if (!sessions.target('claude', id) && !sessions.target('codex', id)) {
       throw new RequestError(409, '선택한 Orca 세션이 연결되어 있지 않습니다.');
     }
+    omitEvents(res, hiddenEvents);
     even.events(req, res, next);
   });
   api.use((req, res, next) => {
@@ -136,6 +164,9 @@ export function createApps(options: {
     if (!remoteRoutes.has(route)) return next();
     if (req.method === 'POST') {
       const destination = active(req.body?.sessionId, providerForSession(req.body?.provider, req.body?.sessionId));
+      // Without the wrapper's hooks these would reach the SDK provider, which
+      // does not own the session. Orca shows the native prompt instead.
+      if (destination.via === 'orca') throw new RequestError(409, '이 세션의 권한, 선택, 중단은 Orca 터미널에서 직접 처리하세요.');
       req.body.provider = destination.provider;
     }
     even.core(req, res, next);
@@ -156,6 +187,7 @@ export function createApps(options: {
   });
   local.post('/api/claude-sync/hook', express.json({ limit: '2mb' }), even.onHook);
   local.use('/api', api);
+  local.get('/', (_req, res) => res.redirect('/settings'));
   local.get('/settings', (_req, res) => res.sendFile('settings.html', { root: publicPath }));
   local.get('/local/pairing.svg', async (_req, res) => {
     if (!options.pairingUrl) return res.sendStatus(404);
@@ -169,6 +201,20 @@ export function createApps(options: {
     try { return res.json(settings.update(req.body)); }
     catch (error) { throw new RequestError(400, error instanceof Error ? error.message : '잘못된 설정입니다.'); }
   });
+  const orcaChange = (action: (sessionId: string) => Promise<unknown> | unknown): RequestHandler => async (req, res) => {
+    if (req.get('X-Even-Orca-Settings') !== '1') return res.sendStatus(403);
+    const sessionId = req.body?.sessionId;
+    if (!validId(sessionId)) throw new RequestError(400, '세션 ID가 필요합니다.');
+    try { await action(sessionId); }
+    catch (error) { throw new RequestError(409, error instanceof Error ? error.message : 'Orca 세션을 연결하지 못했습니다.'); }
+    return res.json({ ok: true });
+  };
+  local.get('/local/orca', async (_req, res) => {
+    try { res.json({ terminals: await even.orca.discover() }); }
+    catch (error) { res.json({ terminals: [], error: error instanceof Error ? error.message : 'Orca에 연결하지 못했습니다.' }); }
+  });
+  local.post('/local/orca/attach', express.json({ limit: '2kb' }), orcaChange(id => even.orca.attach(id)));
+  local.post('/local/orca/detach', express.json({ limit: '2kb' }), orcaChange(id => even.orca.detach(id)));
   local.get('/local/activity', (_req, res) => res.json({
     activity: submission.activity(),
     targets: [...sessions.list('claude'), ...sessions.list('codex')].map(({ id, provider, cwd }) => ({ id, provider, cwd })),

@@ -15,6 +15,12 @@
       <p class="muted">Even Realities 앱의 Terminal에서 스캔하세요.</p>
       <img alt="Even Terminal 연결 QR 코드" width="220" height="220">
     </details>
+    <section aria-labelledby="orca-title">
+      <div class="title-row"><h2 id="orca-title">Orca 터미널</h2><button class="secondary" id="orca-refresh" type="button">다시 찾기</button></div>
+      <p class="muted">G2에서 쓸 Claude Code 터미널을 고르세요. Claude Code가 실행 중인 터미널만 표시됩니다.</p>
+      <p id="orca-empty" class="muted">Orca 터미널을 찾는 중입니다.</p>
+      <ul id="orca-list"></ul>
+    </section>
     <section aria-labelledby="configuration">
       <form id="settings">
         <div class="title-row"><h2 id="configuration">문장 보정</h2><button type="submit">설정 저장</button></div>
@@ -23,6 +29,8 @@
           <datalist id="models"><option value="gpt-6-luna"><option value="gpt-6.2-sol"></datalist>
           <label>Reasoning effort<select id="effort"><option>none</option><option>minimal</option><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option></select></label>
         </div>
+        <label class="toggle"><input id="show-tools" type="checkbox"> G2에 도구 실행(Bash, Read 등) 표시</label>
+        <p class="muted">끄면 G2에는 에이전트의 진행 메시지와 답변만 표시됩니다.</p>
         <div class="title-row dictionary"><h3>내 사전</h3><button class="secondary" id="add" type="button">단어 추가</button></div>
         <p class="muted">정확한 표기를 등록하세요. 자주 생기는 오인식은 함께 적어 두면 우선 교정됩니다.</p>
         <div id="terms"></div>
